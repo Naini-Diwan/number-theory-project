@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Number Theory Encoder/Decoder</title>
+    <title>Text Encoder/Decoder - a Number Theory wonder</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 2em; }
         input, textarea, button { margin: 0.5em 0; }
@@ -23,7 +23,7 @@
     </form>
     <h3>Result:</h3>
     <textarea id="resultText" readonly></textarea>
-
+    <div id="decodeHints" style="color: #b00; font-size: 0.95em; margin-top: 0.5em;"></div>
     <script>
         // Fast modular exponentiation
         function modPow(base, exp, mod) {
@@ -42,6 +42,22 @@
             const text = document.getElementById('inputText').value;
             const k = parseInt(document.getElementById('keyK').value);
             const m = parseInt(document.getElementById('modM').value);
+            if (isNaN(k)) {
+                document.getElementById('resultText').value = "Key (k) must be a number.";
+                return;
+            }
+            if (k < 1) {
+                document.getElementById('resultText').value = "Key (k) must be at least 1.";
+                return;
+            }
+            if (isNaN(m)) {
+                document.getElementById('resultText').value = "Modulus (m) must be a number.";
+                return;
+            }
+            if (m < 2) {
+                document.getElementById('resultText').value = "Modulus (m) must be at least 2.";
+                return;
+            }
             const encoded = [];
             for (let i = 0; i < text.length; i++) {
                 const code = text.charCodeAt(i);
@@ -55,11 +71,43 @@
             const encoded = document.getElementById('inputText').value.trim().split(/\s+/);
             const k = parseInt(document.getElementById('keyK').value);
             const m = parseInt(document.getElementById('modM').value);
+            const hints = [];
+            if (isNaN(k)) {
+                document.getElementById('resultText').value = "Key (k) must be a number.";
+                document.getElementById('decodeHints').innerHTML = "";
+                return;
+            }
+            if (k < 1) {
+                document.getElementById('resultText').value = "Key (k) must be at least 1.";
+                document.getElementById('decodeHints').innerHTML = "";
+                return;
+            }
+            if (isNaN(m)) {
+                document.getElementById('resultText').value = "Modulus (m) must be a number.";
+                document.getElementById('decodeHints').innerHTML = "";
+                return;
+            }
+            if (m < 2) {
+                document.getElementById('resultText').value = "Modulus (m) must be at least 2.";
+                document.getElementById('decodeHints').innerHTML = "";
+                return;
+            }
             const decoded = [];
             for (let i = 0; i < encoded.length; i++) {
-                const target = parseInt(encoded[i]);
+                const val = encoded[i];
+                if (val === "") continue;
+                const target = parseInt(val);
+                if (isNaN(target)) {
+                    decoded.push('?');
+                    hints.push(`Position ${i+1}: Not a number`);
+                    continue;
+                }
+                if (target < 0 || target >= m) {
+                    decoded.push('?');
+                    hints.push(`Position ${i+1}: Value ${target} out of range for modulus ${m}`);
+                    continue;
+                }
                 let found = false;
-                // Brute force search for a such that (a^k mod m) == target
                 for (let a = 0; a < m; a++) {
                     if (modPow(a, k, m) === target) {
                         decoded.push(String.fromCharCode(a));
@@ -67,10 +115,22 @@
                         break;
                     }
                 }
-                if (!found) decoded.push('?'); // Unknown character
+                if (!found) {
+                    decoded.push('?');
+                    hints.push(`Position ${i+1}: No character found for value ${target} with key ${k} and modulus ${m}`);
+                }
             }
             document.getElementById('resultText').value = decoded.join('');
+            if (hints.length > 0) {
+                document.getElementById('decodeHints').innerHTML = "Decode errors:<br>" + hints.map(h => "&#8226; " + h).join("<br>");
+            } else {
+                document.getElementById('decodeHints').innerHTML = "";
+            }
         }
     </script>
+    <footer>
+      <p>© 2025 Naini Diwan. All Rights Reserved.</p>
+    </footer>
 </body>
 </html>
+
