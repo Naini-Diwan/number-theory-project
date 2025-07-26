@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Number Theory Encoder/Decoder</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        input, textarea, button { margin: 0.5em 0; }
+        textarea { width: 100%; height: 80px; }
+    </style>
+</head>
+<body>
+    <h2>Number Theory Encoder/Decoder</h2>
+    <form id="nt-form" onsubmit="return false;">
+        <label>Text:</label><br>
+        <textarea id="inputText"></textarea><br>
+        <label>Key (k):</label>
+        <input type="number" id="keyK" value="3" min="1"><br>
+        <label>Modulus (m):</label>
+        <input type="number" id="modM" value="257" min="2"><br>
+        <button onclick="encode()">Encode</button>
+        <button onclick="decode()">Decode</button>
+    </form>
+    <h3>Result:</h3>
+    <textarea id="resultText" readonly></textarea>
+
+    <script>
+        // Fast modular exponentiation
+        function modPow(base, exp, mod) {
+            let result = 1;
+            base = base % mod;
+            while (exp > 0) {
+                if (exp % 2 === 1) result = (result * base) % mod;
+                exp = Math.floor(exp / 2);
+                base = (base * base) % mod;
+            }
+            return result;
+        }
+
+        // Encode: for each char, compute (charCode^k) mod m
+        function encode() {
+            const text = document.getElementById('inputText').value;
+            const k = parseInt(document.getElementById('keyK').value);
+            const m = parseInt(document.getElementById('modM').value);
+            const encoded = [];
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                encoded.push(modPow(code, k, m));
+            }
+            document.getElementById('resultText').value = encoded.join(' ');
+        }
+
+        // Decode: for each number, compute modular root (brute force)
+        function decode() {
+            const encoded = document.getElementById('inputText').value.trim().split(/\s+/);
+            const k = parseInt(document.getElementById('keyK').value);
+            const m = parseInt(document.getElementById('modM').value);
+            const decoded = [];
+            for (let i = 0; i < encoded.length; i++) {
+                const target = parseInt(encoded[i]);
+                let found = false;
+                // Brute force search for a such that (a^k mod m) == target
+                for (let a = 0; a < m; a++) {
+                    if (modPow(a, k, m) === target) {
+                        decoded.push(String.fromCharCode(a));
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) decoded.push('?'); // Unknown character
+            }
+            document.getElementById('resultText').value = decoded.join('');
+        }
+    </script>
+</body>
+</html>
