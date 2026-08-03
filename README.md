@@ -1,0 +1,1 @@
+This is a simple text encoder-decoder which I built through HTML, based on my learnings during the Reading Project in *Number Theory* under the supervision of **Dr. Ajit Bhand** [Dept. of Mathematics, IISER Bhopal]. 
