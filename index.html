@@ -7,6 +7,9 @@
         body { font-family: Arial, sans-serif; margin: 2em; }
         input, textarea, button { margin: 0.5em 0; }
         textarea { width: 100%; height: 80px; }
+        #statusText { font-size: 0.95em; margin-top: 0.5em; }
+        .warn { color: #b00; }
+        .ok { color: #070; }
     </style>
 </head>
 <body>
@@ -23,6 +26,7 @@
     </form>
     <h3>Result:</h3>
     <textarea id="resultText" readonly></textarea>
+    <div id="statusText"></div>
     <div id="decodeHints" style="color: #b00; font-size: 0.95em; margin-top: 0.5em;"></div>
     <script>
         // Fast modular exponentiation
@@ -37,100 +41,163 @@
             return result;
         }
 
-        // Encode: for each char, compute (charCode^k) mod m
-        function encode() {
-            const text = document.getElementById('inputText').value;
-            const k = parseInt(document.getElementById('keyK').value);
-            const m = parseInt(document.getElementById('modM').value);
-            if (isNaN(k)) {
-                document.getElementById('resultText').value = "Key (k) must be a number.";
-                return;
+        function gcd(a, b) {
+            while (b !== 0) {
+                [a, b] = [b, a % b];
             }
-            if (k < 1) {
-                document.getElementById('resultText').value = "Key (k) must be at least 1.";
-                return;
-            }
-            if (isNaN(m)) {
-                document.getElementById('resultText').value = "Modulus (m) must be a number.";
-                return;
-            }
-            if (m < 2) {
-                document.getElementById('resultText').value = "Modulus (m) must be at least 2.";
-                return;
-            }
-            const encoded = [];
-            for (let i = 0; i < text.length; i++) {
-                const code = text.charCodeAt(i);
-                encoded.push(modPow(code, k, m));
-            }
-            document.getElementById('resultText').value = encoded.join(' ');
+            return a;
         }
 
-        // Decode: for each number, compute modular root (brute force)
-        function decode() {
-            const encoded = document.getElementById('inputText').value.trim().split(/\s+/);
-            const k = parseInt(document.getElementById('keyK').value);
-            const m = parseInt(document.getElementById('modM').value);
-            const hints = [];
+        // Trial-division primality check. Fine for the m sizes this tool is meant for.
+        function isPrime(n) {
+            if (n < 2) return false;
+            if (n % 2 === 0) return n === 2;
+            for (let i = 3; i * i <= n; i += 2) {
+                if (n % i === 0) return false;
+            }
+            return true;
+        }
+
+        // Extended Euclidean algorithm: returns modular inverse of a mod n, or null if gcd(a,n) != 1.
+        function modInverse(a, n) {
+            let [oldR, r] = [a, n];
+            let [oldS, s] = [1, 0];
+            while (r !== 0) {
+                const q = Math.floor(oldR / r);
+                [oldR, r] = [r, oldR - q * r];
+                [oldS, s] = [s, oldS - q * s];
+            }
+            if (oldR !== 1) return null; // not invertible
+            return ((oldS % n) + n) % n;
+        }
+
+        function setStatus(msg, isWarning) {
+            const el = document.getElementById('statusText');
+            el.textContent = msg;
+            el.className = isWarning ? 'warn' : 'ok';
+        }
+
+        function clearOutputs() {
+            document.getElementById('resultText').value = "";
+            document.getElementById('statusText').textContent = "";
+            document.getElementById('statusText').className = "";
+            document.getElementById('decodeHints').innerHTML = "";
+        }
+
+        // Validate k and m. Returns {k, m} on success, or null after writing an error message.
+        function validateKeyAndModulus() {
+            const k = parseInt(document.getElementById('keyK').value, 10);
+            const m = parseInt(document.getElementById('modM').value, 10);
             if (isNaN(k)) {
                 document.getElementById('resultText').value = "Key (k) must be a number.";
-                document.getElementById('decodeHints').innerHTML = "";
-                return;
+                return null;
             }
             if (k < 1) {
                 document.getElementById('resultText').value = "Key (k) must be at least 1.";
-                document.getElementById('decodeHints').innerHTML = "";
-                return;
+                return null;
             }
             if (isNaN(m)) {
                 document.getElementById('resultText').value = "Modulus (m) must be a number.";
-                document.getElementById('decodeHints').innerHTML = "";
-                return;
+                return null;
             }
             if (m < 2) {
                 document.getElementById('resultText').value = "Modulus (m) must be at least 2.";
-                document.getElementById('decodeHints').innerHTML = "";
+                return null;
+            }
+            if (!isPrime(m)) {
+                document.getElementById('resultText').value =
+                    `Modulus (m) must be prime for encode/decode to be reliably reversible. ${m} is not prime.`;
+                return null;
+            }
+            if (gcd(k, m - 1) !== 1) {
+                document.getElementById('resultText').value =
+                    `Key (k) must be coprime to m-1 (=${m - 1}) for decoding to work. gcd(${k}, ${m - 1}) = ${gcd(k, m - 1)}, not 1. Pick a different k.`;
+                return null;
+            }
+            return { k, m };
+        }
+
+        // Encode: for each char, compute (charCode^k) mod m
+        function encode() {
+            clearOutputs();
+            const params = validateKeyAndModulus();
+            if (!params) return;
+            const { k, m } = params;
+
+            const text = document.getElementById('inputText').value;
+            const encoded = [];
+            const outOfRange = [];
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                if (code >= m) {
+                    outOfRange.push(`Position ${i + 1}: character '${text[i]}' has code ${code}, which is >= modulus ${m}`);
+                    encoded.push('?');
+                    continue;
+                }
+                encoded.push(modPow(code, k, m));
+            }
+
+            document.getElementById('resultText').value = encoded.join(' ');
+
+            if (outOfRange.length > 0) {
+                document.getElementById('decodeHints').innerHTML =
+                    "Encode warnings (these characters cannot round-trip — increase the modulus):<br>" +
+                    outOfRange.map(h => "&#8226; " + h).join("<br>");
+                setStatus("Encoded with unrepresentable characters. See warnings below.", true);
+            } else {
+                setStatus(`Encoded OK. m=${m} is prime and gcd(k, m-1)=1, so this will decode cleanly.`, false);
+            }
+        }
+
+        // Decode: for each number, compute target^d mod m, where d = modInverse(k, m-1)
+        function decode() {
+            clearOutputs();
+            const params = validateKeyAndModulus();
+            if (!params) return;
+            const { k, m } = params;
+
+            const d = modInverse(k, m - 1);
+            if (d === null) {
+                // Should not happen given the gcd check above, but guard anyway.
+                document.getElementById('resultText').value =
+                    `Key (k)=${k} has no modular inverse mod ${m - 1}. Cannot decode.`;
                 return;
             }
+
+            const encodedRaw = document.getElementById('inputText').value.trim();
+            const parts = encodedRaw.length === 0 ? [] : encodedRaw.split(/\s+/);
             const decoded = [];
-            for (let i = 0; i < encoded.length; i++) {
-                const val = encoded[i];
-                if (val === "") continue;
-                const target = parseInt(val);
+            const hints = [];
+
+            for (let i = 0; i < parts.length; i++) {
+                const val = parts[i];
+                const target = parseInt(val, 10);
                 if (isNaN(target)) {
                     decoded.push('?');
-                    hints.push(`Position ${i+1}: Not a number`);
+                    hints.push(`Position ${i + 1}: "${val}" is not a number`);
                     continue;
                 }
                 if (target < 0 || target >= m) {
                     decoded.push('?');
-                    hints.push(`Position ${i+1}: Value ${target} out of range for modulus ${m}`);
+                    hints.push(`Position ${i + 1}: value ${target} out of range for modulus ${m}`);
                     continue;
                 }
-                let found = false;
-                for (let a = 0; a < m; a++) {
-                    if (modPow(a, k, m) === target) {
-                        decoded.push(String.fromCharCode(a));
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    decoded.push('?');
-                    hints.push(`Position ${i+1}: No character found for value ${target} with key ${k} and modulus ${m}`);
-                }
+                const a = modPow(target, d, m);
+                decoded.push(String.fromCharCode(a));
             }
+
             document.getElementById('resultText').value = decoded.join('');
+
             if (hints.length > 0) {
                 document.getElementById('decodeHints').innerHTML = "Decode errors:<br>" + hints.map(h => "&#8226; " + h).join("<br>");
+                setStatus("Decoded with errors. See details below.", true);
             } else {
-                document.getElementById('decodeHints').innerHTML = "";
+                setStatus(`Decoded using modular inverse d=${d} (k^-1 mod m-1). This is deterministic, not brute-forced.`, false);
             }
         }
     </script>
     <footer style="margin-top: 60px;">
-      <p>© 2025 Naini Diwan. All Rights Reserved.</p>
+      <p>© 2026 <a href="https://naini-diwan.github.io/Hello-Naini/" target="_blank" rel="noopener">Naini Diwan</a>. All Rights Reserved.</p>
     </footer>
 </body>
 </html>
-
